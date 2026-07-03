@@ -1,0 +1,180 @@
+-- LocalScript (put in StarterPlayerScripts or StarterGui)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+-- Positions
+local POS_1 = Vector3.new(-56, 70, 589)
+local POS_2 = Vector3.new(-56, 70, 9498)
+
+local REPEAT_INTERVAL = 20 -- seconds
+
+local flying = false
+local running = false -- overall on/off state (controls the repeat loop)
+local flyConnection = nil
+local repeatThread = nil
+
+-- Basic fly function: moves character toward a target position
+local function flyTo(targetPos, speed, onComplete)
+	local character = player.Character or player.CharacterAdded:Wait()
+	local hrp = character:WaitForChild("HumanoidRootPart")
+	local humanoid = character:WaitForChild("Humanoid")
+
+	humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+	hrp.AssemblyLinearVelocity = Vector3.new()
+
+	if flyConnection then
+		flyConnection:Disconnect()
+		flyConnection = nil
+	end
+
+	flyConnection = RunService.Heartbeat:Connect(function(dt)
+		if not flying then
+			flyConnection:Disconnect()
+			flyConnection = nil
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+			return
+		end
+
+		local currentPos = hrp.Position
+		local direction = (targetPos - currentPos)
+		local distance = direction.Magnitude
+
+		if distance < 2 then
+			flyConnection:Disconnect()
+			flyConnection = nil
+			hrp.AssemblyLinearVelocity = Vector3.new()
+			if onComplete then
+				onComplete()
+			end
+			return
+		end
+
+		local step = direction.Unit * speed * dt
+		hrp.CFrame = CFrame.new(currentPos + step, currentPos + step + direction.Unit)
+		hrp.AssemblyLinearVelocity = Vector3.new() -- cancel gravity/momentum each frame
+	end)
+end
+
+local function playOnce(onComplete)
+	if flying then return end
+	flying = true
+
+	flyTo(POS_1, 400, function()
+		if flying then
+			flyTo(POS_2, 400, function()
+				flying = false -- finished this pass
+				local character = player.Character
+				if character then
+					local humanoid = character:FindFirstChild("Humanoid")
+					if humanoid then
+						humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+					end
+				end
+				if onComplete then
+					onComplete()
+				end
+			end)
+		end
+	end)
+end
+
+local function stopSequence()
+	running = false
+	flying = false
+
+	if flyConnection then
+		flyConnection:Disconnect()
+		flyConnection = nil
+	end
+
+	repeatThread = nil -- lets any running wait-loop know to stop when it checks `running`
+
+	local character = player.Character
+	if character then
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character:FindFirstChild("Humanoid")
+		if hrp then
+			hrp.AssemblyLinearVelocity = Vector3.new()
+		end
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end
+end
+
+local function startSequence()
+	if running then return end
+	running = true
+
+	repeatThread = task.spawn(function()
+		while running do
+			playOnce()
+
+			-- wait for the current pass to actually finish before starting the countdown
+			while flying and running do
+				task.wait(0.1)
+			end
+
+			if not running then break end
+
+			-- wait 38 seconds, but bail out early if Stop is pressed
+			local waited = 0
+			while waited < REPEAT_INTERVAL and running do
+				task.wait(0.1)
+				waited += 0.1
+			end
+		end
+	end)
+end
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "FlyAdminGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 160, 0, 100)
+frame.Position = UDim2.new(0, 20, 0.5, -300)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 25)
+title.BackgroundTransparency = 1
+title.Text = "Fly Menu"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+title.Parent = frame
+
+local startButton = Instance.new("TextButton")
+startButton.Size = UDim2.new(0.9, 0, 0, 30)
+startButton.Position = UDim2.new(0.05, 0, 0, 30)
+startButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+startButton.Text = "Start"
+startButton.TextColor3 = Color3.new(1, 1, 1)
+startButton.Font = Enum.Font.SourceSansBold
+startButton.TextSize = 16
+startButton.Parent = frame
+
+local stopButton = Instance.new("TextButton")
+stopButton.Size = UDim2.new(0.9, 0, 0, 30)
+stopButton.Position = UDim2.new(0.05, 0, 0, 65)
+stopButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+stopButton.Text = "Stop"
+stopButton.TextColor3 = Color3.new(1, 1, 1)
+stopButton.Font = Enum.Font.SourceSansBold
+stopButton.TextSize = 16
+stopButton.Parent = frame
+
+startButton.MouseButton1Click:Connect(startSequence)
+stopButton.MouseButton1Click:Connect(stopSequence)

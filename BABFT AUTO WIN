@@ -1,4 +1,14 @@
--- LocalScript (put in StarterPlayerScripts or StarterGui)
+-- Add near the top with other services
+local VirtualUser = game:GetService("VirtualUser")
+local Players = game:GetService("Players")
+
+-- Anti-idle: simulates input every ~30 seconds
+local player = Players.LocalPlayer
+
+player.Idled:Connect(function()
+	VirtualUser:CaptureController()
+	VirtualUser:ClickB
+	-- LocalScript (put in StarterPlayerScripts or StarterGui)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")

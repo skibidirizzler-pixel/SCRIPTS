@@ -1,0 +1,171 @@
+-- Admin Panel: Ball Auto-TP + WalkSpeed Slider
+-- Place in StarterPlayerScripts (LocalScript) or run via executor
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+end)
+
+-- State
+local tpEnabled = false
+local walkSpeedValue = 16
+local MAX_SPEED = 200
+
+-- === GUI ===
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AdminPanel"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 220, 0, 140)
+frame.Position = UDim2.new(0, 20, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 24)
+title.BackgroundTransparency = 1
+title.Text = "Admin Panel"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.Parent = frame
+
+-- Toggle button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(1, -20, 0, 30)
+toggleBtn.Position = UDim2.new(0, 10, 0, 30)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+toggleBtn.Text = "Ball TP: OFF"
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 14
+toggleBtn.Parent = frame
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+
+toggleBtn.MouseButton1Click:Connect(function()
+	tpEnabled = not tpEnabled
+	toggleBtn.Text = "Ball TP: " .. (tpEnabled and "ON" or "OFF")
+	toggleBtn.BackgroundColor3 = tpEnabled and Color3.fromRGB(40, 160, 60) or Color3.fromRGB(180, 40, 40)
+end)
+
+-- WalkSpeed label + slider
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, -20, 0, 18)
+speedLabel.Position = UDim2.new(0, 10, 0, 68)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "WalkSpeed: " .. walkSpeedValue
+speedLabel.TextColor3 = Color3.new(1, 1, 1)
+speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 13
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = frame
+
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Size = UDim2.new(1, -20, 0, 8)
+sliderTrack.Position = UDim2.new(0, 10, 0, 92)
+sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+sliderTrack.Parent = frame
+Instance.new("UICorner", sliderTrack).CornerRadius = UDim.new(1, 0)
+
+local initialRel = walkSpeedValue / MAX_SPEED
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new(initialRel, 0, 1, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(80, 140, 220)
+sliderFill.Parent = sliderTrack
+Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
+
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Size = UDim2.new(0, 14, 0, 14)
+sliderKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+sliderKnob.Position = UDim2.new(initialRel, 0, 0.5, 0)
+sliderKnob.BackgroundColor3 = Color3.new(1, 1, 1)
+sliderKnob.Parent = sliderTrack
+Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
+
+local dragging = false
+
+local function updateSliderFromX(x)
+	local trackPos = sliderTrack.AbsolutePosition.X
+	local trackWidth = sliderTrack.AbsoluteSize.X
+	local rel = math.clamp((x - trackPos) / trackWidth, 0, 1)
+	walkSpeedValue = math.floor(rel * MAX_SPEED)
+	sliderFill.Size = UDim2.new(rel, 0, 1, 0)
+	sliderKnob.Position = UDim2.new(rel, 0, 0.5, 0)
+	speedLabel.Text = "WalkSpeed: " .. walkSpeedValue
+end
+
+sliderKnob.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+	end
+end)
+
+sliderTrack.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		updateSliderFromX(input.Position.X)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		updateSliderFromX(input.Position.X)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false
+	end
+end)
+
+-- === Ball finder (recursive search by name) ===
+local function findBall()
+	return workspace:FindFirstChild("Ball", true)
+end
+
+-- === Loops: both run every 0.01s ===
+
+task.spawn(function()
+	while true do
+		task.wait(0.001)
+		if tpEnabled and hrp then
+			local ball = findBall()
+			if ball then
+				local pos
+				if ball:IsA("BasePart") then
+					pos = ball.Position + Vector3.new(0, 3, 0)
+				elseif ball:IsA("Model") and ball.PrimaryPart then
+					pos = ball.PrimaryPart.Position + Vector3.new(0, 3, 0)
+				end
+				if pos then
+					hrp.CFrame = CFrame.new(pos)
+				end
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(0.001)
+		if humanoid then
+			humanoid.WalkSpeed = walkSpeedValue
+		end
+	end
+end)

@@ -1,25 +1,22 @@
--- Add near the top with other services
-local VirtualUser = game:GetService("VirtualUser")
-local Players = game:GetService("Players")
-
--- Anti-idle: simulates input every ~30 seconds
-local player = Players.LocalPlayer
-
-player.Idled:Connect(function()
-	VirtualUser:CaptureController()
-	VirtualUser:ClickB
-	-- LocalScript (put in StarterPlayerScripts or StarterGui)
+-- LocalScript (put in StarterPlayerScripts or StarterGui)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
+
+-- Anti-idle: fires when Roblox is about to kick for inactivity
+player.Idled:Connect(function()
+	VirtualUser:CaptureController()
+	VirtualUser:ClickButton2(Vector2.new())
+end)
 
 -- Positions
 local POS_1 = Vector3.new(-56, 70, 589)
 local POS_2 = Vector3.new(-56, 70, 9498)
 
-local REPEAT_INTERVAL = 20 -- seconds
+local REPEAT_INTERVAL = 20 -- seconds between passes
 
 local flying = false
 local running = false -- overall on/off state (controls the repeat loop)
@@ -130,7 +127,7 @@ local function startSequence()
 
 			if not running then break end
 
-			-- wait 38 seconds, but bail out early if Stop is pressed
+			-- wait REPEAT_INTERVAL seconds, but bail out early if Stop is pressed
 			local waited = 0
 			while waited < REPEAT_INTERVAL and running do
 				task.wait(0.1)
@@ -140,6 +137,9 @@ local function startSequence()
 	end)
 end
 
+-- Stop cleanly if the character respawns, so the flight doesn't stall on the old character
+player.CharacterAdded:Connect(stopSequence)
+
 -- GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "FlyAdminGui"
@@ -148,7 +148,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 160, 0, 100)
-frame.Position = UDim2.new(0, 20, 0.5, -300)
+frame.Position = UDim2.new(0, 20, 0.5, -50)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
 frame.Parent = screenGui

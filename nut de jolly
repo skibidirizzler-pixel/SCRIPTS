@@ -1,0 +1,160 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local lp = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+local TARGET_MODEL = "monster"          -- case-insensitive
+local TARGET_PART = "HumanoidRootPart"
+local TOGGLE_KEY = Enum.KeyCode.I
+local BOX_COLOR = Color3.fromRGB(255, 60, 60)
+
+local boxes = {} -- [part] = Frame
+local espOn = false
+
+-- target check: a HumanoidRootPart whose parent model is named "monster"
+local function isTarget(inst)
+	return inst:IsA("BasePart")
+		and inst.Name == TARGET_PART
+		and inst.Parent ~= nil
+		and inst.Parent:IsA("Model")
+		and inst.Parent.Name:lower() == TARGET_MODEL:lower()
+end
+
+-- GUIs
+local playerGui = lp:WaitForChild("PlayerGui")
+
+local boxGui = Instance.new("ScreenGui")
+boxGui.Name = "ESPBoxes"
+boxGui.ResetOnSpawn = false
+boxGui.IgnoreGuiInset = true -- so boxes line up with the real screen position
+boxGui.Parent = playerGui
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "AdminPanel"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(160, 70)
+frame.Position = UDim2.new(0, 20, 0.5, -35)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 24)
+title.BackgroundTransparency = 1
+title.Text = "Admin Panel"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.Parent = frame
+
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(1, -20, 0, 30)
+btn.Position = UDim2.new(0, 10, 0, 30)
+btn.BackgroundColor3 = Color3.fromRGB(170, 40, 40)
+btn.Text = "ESP: OFF"
+btn.TextColor3 = Color3.new(1, 1, 1)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 14
+btn.Parent = frame
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+-- box create/remove
+local function removeBox(part)
+	if boxes[part] then
+		boxes[part]:Destroy()
+		boxes[part] = nil
+	end
+end
+
+local function addBox(part)
+	if boxes[part] then return end
+	local box = Instance.new("Frame")
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Visible = false
+	box.Parent = boxGui
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = BOX_COLOR
+	stroke.Thickness = 2
+	stroke.Parent = box
+
+	boxes[part] = box
+end
+
+-- toggle
+local function setESP(state)
+	espOn = state
+	btn.Text = espOn and "ESP: ON" or "ESP: OFF"
+	btn.BackgroundColor3 = espOn and Color3.fromRGB(40, 150, 60) or Color3.fromRGB(170, 40, 40)
+
+	if espOn then
+		for _, inst in workspace:GetDescendants() do
+			if isTarget(inst) then addBox(inst) end
+		end
+	else
+		for part in pairs(boxes) do removeBox(part) end
+	end
+end
+
+btn.MouseButton1Click:Connect(function()
+	setESP(not espOn)
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == TOGGLE_KEY then
+		setESP(not espOn)
+	end
+end)
+
+-- targets spawning in / being removed
+workspace.DescendantAdded:Connect(function(inst)
+	if espOn and isTarget(inst) then addBox(inst) end
+end)
+workspace.DescendantRemoving:Connect(function(inst)
+	if boxes[inst] then removeBox(inst) end
+end)
+
+-- update boxes every frame
+RunService.RenderStepped:Connect(function()
+	if not espOn then return end
+	camera = workspace.CurrentCamera
+
+	for part, box in pairs(boxes) do
+		if not part:IsDescendantOf(workspace) then
+			removeBox(part)
+		else
+			local cf, half = part.CFrame, part.Size / 2
+			local minX, minY = math.huge, math.huge
+			local maxX, maxY = -math.huge, -math.huge
+			local visible = true
+
+			for _, x in ipairs({-1, 1}) do
+				for _, y in ipairs({-1, 1}) do
+					for _, z in ipairs({-1, 1}) do
+						local pos = cf:PointToWorldSpace(Vector3.new(half.X * x, half.Y * y, half.Z * z))
+						local sp = camera:WorldToViewportPoint(pos)
+						if sp.Z <= 0 then visible = false end
+						minX, minY = math.min(minX, sp.X), math.min(minY, sp.Y)
+						maxX, maxY = math.max(maxX, sp.X), math.max(maxY, sp.Y)
+					end
+				end
+			end
+
+			box.Visible = visible
+			if visible then
+				box.Position = UDim2.fromOffset(minX, minY)
+				box.Size = UDim2.fromOffset(maxX - minX, maxY - minY)
+			end
+		end
+	end
+end)
